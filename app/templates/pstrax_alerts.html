@@ -1,0 +1,524 @@
+{% extends "base.html" %}
+
+{% block title %}PSTrax Alerts - FireFleet HQ{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    .pstrax-alerts-table th:nth-child(1),
+    .pstrax-alerts-table td:nth-child(1) {
+        white-space: nowrap;
+        width: 9.5rem;
+    }
+
+    .pstrax-alerts-table th:nth-child(5),
+    .pstrax-alerts-table td:nth-child(5) {
+        min-width: 16rem;
+    }
+
+    .pstrax-alerts-table .priority-urgent {
+        color: var(--bs-danger);
+        font-weight: 600;
+    }
+
+    .pstrax-alerts-desc {
+        max-width: 28rem;
+        white-space: normal;
+    }
+
+    .pstrax-alerts-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .pstrax-alerts-table th.sortable:hover {
+        color: var(--bs-primary);
+    }
+
+    .pstrax-alerts-table th.sortable .sort-indicator {
+        display: inline-block;
+        margin-left: 0.25rem;
+        opacity: 0.35;
+        font-size: 0.75em;
+    }
+
+    .pstrax-alerts-table th.sortable.active .sort-indicator {
+        opacity: 1;
+        color: var(--bs-primary);
+    }
+
+    .alerts-filter-bar .form-select {
+        min-width: 9.5rem;
+        max-width: 14rem;
+    }
+
+    .pstrax-alerts-table tbody tr.alert-row {
+        cursor: pointer;
+    }
+
+    .pstrax-alerts-table tbody tr.alert-row:focus {
+        outline: 2px solid var(--bs-primary);
+        outline-offset: -2px;
+    }
+
+    #alertDetailModal .alert-detail-desc {
+        white-space: pre-wrap;
+    }
+
+    #alertDetailModal .alert-comment + .alert-comment {
+        border-top: 1px solid var(--bs-border-color);
+        padding-top: 0.75rem;
+        margin-top: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-exclamation-triangle"></i> PSTrax Alerts</h2>
+        <p class="text-muted mb-0" id="alerts-meta">
+            {% if last_alerts_scrape %}
+            Last sync: {{ last_alerts_scrape|localtime }}
+            {% else %}
+            Open Vehicle &amp; Station alerts from PSTrax
+            {% endif %}
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        {% if current_user.is_admin %}
+        <button type="button" class="btn btn-sm btn-outline-primary" id="sync-alerts-btn">
+            <i class="bi bi-arrow-repeat"></i> Sync Now
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="alerts-filter-bar d-flex flex-wrap gap-2 align-items-center mb-3">
+            <input type="search" class="form-control form-control-sm" style="min-width: 14rem; max-width: 18rem;"
+                   id="alerts-search" placeholder="Search alerts…">
+            <select class="form-select form-select-sm" id="filter-station" aria-label="Filter by station">
+                <option value="">All stations</option>
+            </select>
+            <select class="form-select form-select-sm" id="filter-category" aria-label="Filter by category">
+                <option value="">All categories</option>
+            </select>
+            <select class="form-select form-select-sm" id="filter-priority" aria-label="Filter by priority">
+                <option value="">All priorities</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-filters-btn" title="Clear filters">
+                Clear
+            </button>
+            <span class="text-muted small ms-auto" id="alerts-visible-count"></span>
+        </div>
+        <div class="table-responsive" style="max-height: 72vh; overflow: auto;">
+            <table class="table table-sm table-striped table-hover align-middle pstrax-alerts-table">
+                <thead class="sticky-top bg-body">
+                    <tr>
+                        <th class="sortable" data-sort="alert_date">Date <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="app_name">Assignment <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="post_station">Station <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="current_location">Location <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="alert_text">Description <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="category">Category <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="priority">Priority <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="opened_by">Opened By <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="last_update">Last Update <span class="sort-indicator"></span></th>
+                    </tr>
+                </thead>
+                <tbody id="pstrax-alerts-body">
+                    <tr>
+                        <td colspan="9" class="text-center text-muted">Loading alerts…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="alertDetailModal" tabindex="-1" aria-labelledby="alertDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="alertDetailModalLabel">Alert details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="alert-detail-body"></div>
+            <div class="modal-footer">
+                <a class="btn btn-outline-primary" id="alert-detail-pstrax-link" href="#" target="_blank" rel="noopener noreferrer">
+                    Open in PSTrax
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let alertRows = [];
+let sortKey = 'alert_date';
+let sortDir = 'desc';
+const PSTRAX_BASE_URL = {{ (pstrax_base_url or 'https://pstrax.com')|tojson }};
+
+const DATE_FIELDS = new Set(['alert_date', 'last_update']);
+const PRIORITY_ORDER = { urgent: 0, high: 1, routine: 2, low: 3 };
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function parseAlertDate(value) {
+    if (!value) return null;
+    const m = String(value).trim().match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*(AM|PM))?$/i
+    );
+    if (!m) return null;
+    let hour = m[4] ? parseInt(m[4], 10) : 0;
+    const minute = m[5] ? parseInt(m[5], 10) : 0;
+    const ampm = (m[6] || '').toUpperCase();
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    return new Date(
+        parseInt(m[3], 10),
+        parseInt(m[1], 10) - 1,
+        parseInt(m[2], 10),
+        hour,
+        minute
+    );
+}
+
+function uniqueSorted(values) {
+    return [...new Set(values.filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+}
+
+function populateFilterSelect(selectEl, values, allLabel) {
+    if (!selectEl) return;
+    const current = selectEl.value;
+    selectEl.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` +
+        values.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if (current && values.includes(current)) {
+        selectEl.value = current;
+    } else {
+        selectEl.value = '';
+    }
+}
+
+function refreshFilterOptions() {
+    populateFilterSelect(
+        document.getElementById('filter-station'),
+        uniqueSorted(alertRows.map((r) => r.post_station)),
+        'All stations'
+    );
+    populateFilterSelect(
+        document.getElementById('filter-category'),
+        uniqueSorted(alertRows.map((r) => r.category)),
+        'All categories'
+    );
+    populateFilterSelect(
+        document.getElementById('filter-priority'),
+        uniqueSorted(alertRows.map((r) => r.priority)),
+        'All priorities'
+    );
+}
+
+function compareRows(a, b) {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let av = a[sortKey];
+    let bv = b[sortKey];
+
+    if (DATE_FIELDS.has(sortKey)) {
+        const ad = parseAlertDate(av);
+        const bd = parseAlertDate(bv);
+        if (ad && bd) return (ad - bd) * dir;
+        if (ad && !bd) return -1 * dir;
+        if (!ad && bd) return 1 * dir;
+    }
+
+    if (sortKey === 'priority') {
+        const ap = PRIORITY_ORDER[String(av || '').toLowerCase()] ?? 99;
+        const bp = PRIORITY_ORDER[String(bv || '').toLowerCase()] ?? 99;
+        if (ap !== bp) return (ap - bp) * dir;
+    }
+
+    av = String(av || '');
+    bv = String(bv || '');
+    const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base', numeric: true });
+    if (cmp !== 0) return cmp * dir;
+
+    // Stable tie-breaker
+    return (Number(b.alert_id || 0) - Number(a.alert_id || 0));
+}
+
+function updateSortIndicators() {
+    document.querySelectorAll('.pstrax-alerts-table th.sortable').forEach((th) => {
+        const active = th.dataset.sort === sortKey;
+        th.classList.toggle('active', active);
+        const ind = th.querySelector('.sort-indicator');
+        if (!ind) return;
+        if (!active) {
+            ind.textContent = '↕';
+        } else {
+            ind.textContent = sortDir === 'asc' ? '↑' : '↓';
+        }
+    });
+}
+
+function filteredRows() {
+    const q = (document.getElementById('alerts-search')?.value || '').trim().toLowerCase();
+    const station = document.getElementById('filter-station')?.value || '';
+    const category = document.getElementById('filter-category')?.value || '';
+    const priority = document.getElementById('filter-priority')?.value || '';
+
+    let rows = alertRows.slice();
+    if (station) rows = rows.filter((r) => r.post_station === station);
+    if (category) rows = rows.filter((r) => r.category === category);
+    if (priority) rows = rows.filter((r) => r.priority === priority);
+    if (q) {
+        rows = rows.filter((r) => {
+            const hay = [
+                r.alert_date, r.app_name, r.post_station, r.current_location,
+                r.alert_text, r.category, r.priority, r.opened_by, r.last_update,
+            ].join(' ').toLowerCase();
+            return hay.includes(q);
+        });
+    }
+    rows.sort(compareRows);
+    return rows;
+}
+
+function detailField(label, value) {
+    const text = value == null || value === '' ? '—' : String(value);
+    return `
+        <div class="col-sm-6 col-md-4">
+            <div class="text-muted small">${escapeHtml(label)}</div>
+            <div>${escapeHtml(text)}</div>
+        </div>
+    `;
+}
+
+function openAlertDetail(alertId) {
+    const row = alertRows.find((r) => Number(r.alert_id) === Number(alertId));
+    if (!row) return;
+
+    const body = document.getElementById('alert-detail-body');
+    const title = document.getElementById('alertDetailModalLabel');
+    const pstraxLink = document.getElementById('alert-detail-pstrax-link');
+    if (!body || !title) return;
+
+    const priority = row.priority || '';
+    const priorityClass = priority.toLowerCase() === 'urgent' ? 'priority-urgent' : '';
+    title.textContent = row.app_name
+        ? `Alert #${row.alert_id} · ${row.app_name}`
+        : `Alert #${row.alert_id}`;
+
+    const comments = Array.isArray(row.comments) ? row.comments : [];
+    let commentsHtml = '<p class="text-muted mb-0">No comments.</p>';
+    if (comments.length) {
+        commentsHtml = comments.map((c) => `
+            <div class="alert-comment">
+                ${c.header ? `<div class="fw-semibold small">${escapeHtml(c.header)}</div>` : ''}
+                <div>${escapeHtml(c.body || '')}</div>
+            </div>
+        `).join('');
+    }
+
+    const notes = (row.notes || '').trim();
+    const notesHtml = notes
+        ? `<div class="mt-3"><div class="text-muted small mb-1">Notes</div><div class="alert-detail-desc">${escapeHtml(notes)}</div></div>`
+        : '';
+
+    const priorityHtml = `
+        <div class="col-sm-6 col-md-4">
+            <div class="text-muted small">Priority</div>
+            <div class="${priorityClass}">${escapeHtml(priority || '—')}</div>
+        </div>
+    `;
+
+    body.innerHTML = `
+        <div class="row g-3 mb-3">
+            ${detailField('Date', row.alert_date)}
+            ${detailField('Last update', row.last_update)}
+            ${priorityHtml}
+            ${detailField('Category', row.category)}
+            ${detailField('Station', row.post_station)}
+            ${detailField('Location', row.current_location)}
+            ${detailField('Assignment', row.app_name)}
+            ${detailField('Opened by', row.opened_by)}
+            ${detailField('Cost', row.cost)}
+            ${detailField('Images', Number(row.with_image) ? 'Yes' : 'No')}
+        </div>
+        <div class="mb-3">
+            <div class="text-muted small mb-1">Description</div>
+            <div class="alert-detail-desc">${escapeHtml(row.alert_text || '—')}</div>
+        </div>
+        <div>
+            <div class="text-muted small mb-2">Comments</div>
+            ${commentsHtml}
+        </div>
+        ${notesHtml}
+    `;
+
+    if (pstraxLink) {
+        const base = String(PSTRAX_BASE_URL || 'https://pstrax.com').replace(/\/+$/, '');
+        pstraxLink.href = `${base}/alert-details.php?aid=${encodeURIComponent(row.alert_id)}`;
+        if (Number(row.with_image)) {
+            pstraxLink.title = 'Opens alert details in PSTrax (images available there)';
+        } else {
+            pstraxLink.removeAttribute('title');
+        }
+    }
+
+    const modalEl = document.getElementById('alertDetailModal');
+    if (modalEl && window.bootstrap?.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+}
+
+function renderAlertsTable() {
+    const tbody = document.getElementById('pstrax-alerts-body');
+    if (!tbody) return;
+
+    const rows = filteredRows();
+    const countEl = document.getElementById('alerts-visible-count');
+    if (countEl) {
+        countEl.textContent = rows.length === alertRows.length
+            ? `${rows.length} alerts`
+            : `Showing ${rows.length} of ${alertRows.length}`;
+    }
+    updateSortIndicators();
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No alerts match the current filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((row) => {
+        const priority = row.priority || '';
+        const priorityClass = priority.toLowerCase() === 'urgent' ? 'priority-urgent' : '';
+        const id = Number(row.alert_id);
+        return `
+            <tr class="alert-row" data-alert-id="${id}" tabindex="0" role="button"
+                aria-label="Open alert ${id}">
+                <td>${escapeHtml(row.alert_date || '')}</td>
+                <td>${escapeHtml(row.app_name || '')}</td>
+                <td>${escapeHtml(row.post_station || '')}</td>
+                <td>${escapeHtml(row.current_location || '')}</td>
+                <td class="pstrax-alerts-desc">${escapeHtml(row.alert_text || '')}</td>
+                <td>${escapeHtml(row.category || '')}</td>
+                <td class="${priorityClass}">${escapeHtml(priority)}</td>
+                <td>${escapeHtml(row.opened_by || '')}</td>
+                <td>${escapeHtml(row.last_update || '')}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function loadPstraxAlerts() {
+    fetch('/api/pstrax-alerts')
+        .then((r) => r.json())
+        .then((payload) => {
+            if (payload.error) throw new Error(payload.error);
+            alertRows = Array.isArray(payload.data) ? payload.data : [];
+            const meta = document.getElementById('alerts-meta');
+            if (meta) {
+                const count = payload.count || alertRows.length;
+                const when = payload.last_scrape
+                    ? payload.last_scrape.replace('T', ' ').slice(0, 16)
+                    : null;
+                meta.textContent = when
+                    ? `${count} open alerts · Last sync: ${when}`
+                    : `${count} open alerts`;
+            }
+            refreshFilterOptions();
+            renderAlertsTable();
+        })
+        .catch((err) => {
+            console.error(err);
+            const tbody = document.getElementById('pstrax-alerts-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Failed to load PSTrax alerts.</td></tr>';
+            }
+        });
+}
+
+window.loadPstraxAlerts = loadPstraxAlerts;
+
+document.getElementById('alerts-search')?.addEventListener('input', renderAlertsTable);
+document.getElementById('filter-station')?.addEventListener('change', renderAlertsTable);
+document.getElementById('filter-category')?.addEventListener('change', renderAlertsTable);
+document.getElementById('filter-priority')?.addEventListener('change', renderAlertsTable);
+
+document.getElementById('clear-filters-btn')?.addEventListener('click', () => {
+    const search = document.getElementById('alerts-search');
+    if (search) search.value = '';
+    ['filter-station', 'filter-category', 'filter-priority'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    sortKey = 'alert_date';
+    sortDir = 'desc';
+    renderAlertsTable();
+});
+
+document.querySelectorAll('.pstrax-alerts-table th.sortable').forEach((th) => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortKey = key;
+            sortDir = DATE_FIELDS.has(key) ? 'desc' : 'asc';
+        }
+        renderAlertsTable();
+    });
+});
+
+const alertsBody = document.getElementById('pstrax-alerts-body');
+if (alertsBody) {
+    alertsBody.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr.alert-row');
+        if (!tr) return;
+        openAlertDetail(tr.dataset.alertId);
+    });
+    alertsBody.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tr = e.target.closest('tr.alert-row');
+        if (!tr || e.target !== tr) return;
+        e.preventDefault();
+        openAlertDetail(tr.dataset.alertId);
+    });
+}
+
+const syncBtn = document.getElementById('sync-alerts-btn');
+if (syncBtn) {
+    syncBtn.addEventListener('click', function () {
+        syncBtn.disabled = true;
+        syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing…';
+        fetchWithCSRF('/api/scrape/alerts-trigger', { method: 'POST', body: '{}' })
+            .then((r) => r.json())
+            .then((result) => {
+                if (!result.success) throw new Error(result.error || 'Sync failed');
+                loadPstraxAlerts();
+            })
+            .catch((err) => alert(err.message || 'Sync failed'))
+            .finally(() => {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+            });
+    });
+}
+
+loadPstraxAlerts();
+</script>
+{% endblock %}

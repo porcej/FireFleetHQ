@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Reserve - FireFleet HQ{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    .reserve-page h2 {
+        margin-bottom: 0.25rem;
+    }
+
+    .reserve-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0.75rem;
+    }
+
+    .reserve-summary-item {
+        border: 1px solid var(--border-color, var(--bs-border-color));
+        border-radius: 0.375rem;
+        background: var(--card-bg, var(--bs-body-bg));
+        padding: 0.85rem 0.75rem;
+        text-align: center;
+    }
+
+    .reserve-summary-item .count {
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.15;
+        color: var(--text-color, var(--bs-body-color));
+    }
+
+    .reserve-summary-item .label {
+        margin-top: 0.25rem;
+        font-size: 0.8rem;
+        line-height: 1.25;
+        color: var(--bs-secondary-color);
+    }
+
+    .reserve-group + .reserve-group {
+        margin-top: 1.5rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border-color, var(--bs-border-color));
+    }
+
+    .reserve-group-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.65rem;
+    }
+
+    .reserve-group-title h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .reserve-group-title .count {
+        color: var(--bs-secondary-color);
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+
+    .reserve-table {
+        margin-bottom: 0;
+    }
+
+    .reserve-table th:nth-child(2),
+    .reserve-table td:nth-child(2) {
+        width: 7rem;
+        white-space: nowrap;
+    }
+
+    .reserve-table th:nth-child(3),
+    .reserve-table td:nth-child(3) {
+        width: 30%;
+    }
+
+    @media (max-width: 575.98px) {
+        .reserve-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .reserve-table th:nth-child(2),
+        .reserve-table td:nth-child(2),
+        .reserve-table th:nth-child(3),
+        .reserve-table td:nth-child(3) {
+            width: auto;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reserve-page">
+    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+        <div>
+            <h2><i class="bi bi-archive"></i> Reserve</h2>
+            <p class="text-muted mb-0" id="reserve-total">In-service apparatus marked in reserve</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">By type</h5>
+        </div>
+        <div class="card-body">
+            <div id="reserve-type-blocks" class="reserve-summary">
+                <div class="text-muted">Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Reserve apparatus</h5>
+        </div>
+        <div class="card-body" id="reserve-groups">
+            <p class="text-muted mb-0">Loading…</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderReservePage(payload) {
+    const blocksEl = document.getElementById('reserve-type-blocks');
+    const groupsEl = document.getElementById('reserve-groups');
+    const totalEl = document.getElementById('reserve-total');
+    const typeCounts = payload.type_counts || [];
+    const byType = payload.by_type || [];
+    const total = payload.total || 0;
+
+    if (totalEl) {
+        totalEl.textContent = total === 1
+            ? '1 apparatus in service and in reserve'
+            : `${total} apparatus in service and in reserve`;
+    }
+
+    if (!typeCounts.length) {
+        blocksEl.innerHTML = '<div class="text-muted">No in-service reserve apparatus.</div>';
+        groupsEl.innerHTML = '<p class="text-muted mb-0">No reserve apparatus to list.</p>';
+        return;
+    }
+
+    blocksEl.innerHTML = typeCounts.map((item) => `
+        <div class="reserve-summary-item">
+            <div class="count">${escapeHtml(item.count)}</div>
+            <div class="label">${escapeHtml(item.vehicle_type)}</div>
+        </div>
+    `).join('');
+
+    groupsEl.innerHTML = byType.map((group) => {
+        const rows = (group.apparatus || []).map((row) => `
+            <tr>
+                <td>${escapeHtml(row.assignment || '')}</td>
+                <td>${escapeHtml(row.door_number || row.app_unit || '')}</td>
+                <td>${escapeHtml(row.location || row.station || '')}</td>
+            </tr>
+        `).join('');
+        const countLabel = group.count === 1 ? '1 unit' : `${group.count} units`;
+        return `
+            <section class="reserve-group">
+                <div class="reserve-group-title">
+                    <h3>${escapeHtml(group.vehicle_type)}</h3>
+                    <span class="count">${escapeHtml(countLabel)}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover reserve-table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Assignment</th>
+                                <th>Door #</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </section>
+        `;
+    }).join('');
+}
+
+function loadReserveList() {
+    fetch('/api/reserve-list')
+        .then((r) => r.json())
+        .then((payload) => {
+            if (payload.error) throw new Error(payload.error);
+            renderReservePage(payload);
+        })
+        .catch((err) => {
+            console.error(err);
+            const blocksEl = document.getElementById('reserve-type-blocks');
+            const groupsEl = document.getElementById('reserve-groups');
+            if (blocksEl) blocksEl.innerHTML = '<div class="text-danger">Failed to load reserve counts.</div>';
+            if (groupsEl) groupsEl.innerHTML = '<p class="text-danger mb-0">Failed to load reserve apparatus.</p>';
+        });
+}
+
+window.loadReserveList = loadReserveList;
+loadReserveList();
+</script>
+{% endblock %}

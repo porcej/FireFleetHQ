@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - FireFleet HQ{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 col-xl-10">
+        <h2><i class="bi bi-gear"></i> Settings</h2>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0">PSTrax Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.update_settings') }}">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.pstrax_base_url.label(class="form-label") }}
+                        {{ form.pstrax_base_url(class="form-control", disabled=(not current_user.is_admin)) }}
+                        <small class="form-text text-muted">Base URL (e.g., https://app1.pstrax.com)</small>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.pstrax_username.label(class="form-label") }}
+                        {{ form.pstrax_username(class="form-control", disabled=(not current_user.is_admin)) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.pstrax_password.label(class="form-label") }}
+                        {{ form.pstrax_password(class="form-control", disabled=(not current_user.is_admin)) }}
+                        <small class="form-text text-muted">Leave blank to keep current password</small>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.scrape_interval.label(class="form-label") }}
+                        {{ form.scrape_interval(class="form-control", type="number", min="1", disabled=(not current_user.is_admin)) }}
+                        <small class="form-text text-muted">
+                            How often PSTrax open alerts are synced (current: {{ config.scrape_interval }} minutes).
+                            {% if config.last_alerts_scrape %}
+                            Last alerts sync: {{ config.last_alerts_scrape|localtime }}.
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.apparatus_scrape_interval_hours.label(class="form-label") }}
+                        {{ form.apparatus_scrape_interval_hours(class="form-control", type="number", min="1", disabled=(not current_user.is_admin)) }}
+                        <small class="form-text text-muted">
+                            Fallback interval in hours if minutes is unset. Last sync:
+                            {% if config.last_apparatus_scrape %}
+                                {{ config.last_apparatus_scrape|localtime }}
+                            {% else %}
+                                never
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.app_timezone.label(class="form-label") }}
+                        {{ form.app_timezone(class="form-select", disabled=(not current_user.is_admin)) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.default_alert_color.label(class="form-label") }}
+                        {{ form.default_alert_color(class="form-select", disabled=(not current_user.is_admin)) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.alerts_font_size.label(class="form-label") }}
+                        {{ form.alerts_font_size(class="form-control", type="number", min="12", max="48", disabled=(not current_user.is_admin)) }}
+                    </div>
+
+                    <hr>
+                    <h6>Apparatus Filters</h6>
+                    <p class="text-muted small">Leave all unchecked (or blank) to include every status/station.</p>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Statuses</label>
+                            {% if apparatus_status_options %}
+                            <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                {% for opt in apparatus_status_options %}
+                                <input type="hidden" name="apparatus_status_known" value="{{ opt.name }}">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="apparatus_status_selected"
+                                           value="{{ opt.name }}"
+                                           id="status-{{ loop.index }}"
+                                           {% if opt.selected %}checked{% endif %}
+                                           {% if not current_user.is_admin %}disabled{% endif %}>
+                                    <label class="form-check-label" for="status-{{ loop.index }}">{{ opt.name }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            {{ form.apparatus_statuses(class="form-control", placeholder="e.g. In Service, OOS", disabled=(not current_user.is_admin)) }}
+                            <small class="form-text text-muted">Sync once to populate status checkboxes from PSTrax.</small>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Stations</label>
+                            {% if apparatus_station_options %}
+                            <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                {% for opt in apparatus_station_options %}
+                                <input type="hidden" name="apparatus_station_known" value="{{ opt.name }}">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="apparatus_station_selected"
+                                           value="{{ opt.name }}"
+                                           id="station-{{ loop.index }}"
+                                           {% if opt.selected %}checked{% endif %}
+                                           {% if not current_user.is_admin %}disabled{% endif %}>
+                                    <label class="form-check-label" for="station-{{ loop.index }}">{{ opt.name }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            {{ form.apparatus_stations(class="form-control", placeholder="e.g. Station 1, Station 2", disabled=(not current_user.is_admin)) }}
+                            <small class="form-text text-muted">Sync once to populate station checkboxes from PSTrax.</small>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if current_user.is_admin %}
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Settings
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="trigger-alerts-sync">
+                            <i class="bi bi-arrow-repeat"></i> Sync Alerts Now
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="trigger-apparatus-sync">
+                            <i class="bi bi-arrow-repeat"></i> Sync Apparatus Now
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="capture-department-status">
+                            <i class="bi bi-filetype-json"></i> Capture Sample Response
+                        </button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if current_user.is_admin %}
+<script>
+document.getElementById('trigger-alerts-sync')?.addEventListener('click', function () {
+    const btn = this;
+    btn.disabled = true;
+    fetchWithCSRF('/api/scrape/alerts-trigger', { method: 'POST', body: '{}' })
+        .then((r) => r.json())
+        .then((result) => {
+            if (!result.success) throw new Error(result.error || 'Sync failed');
+            alert(`Synced ${result.count || 0} PSTrax alerts.`);
+            window.location.reload();
+        })
+        .catch((err) => alert(err.message || 'Sync failed'))
+        .finally(() => { btn.disabled = false; });
+});
+
+document.getElementById('trigger-apparatus-sync')?.addEventListener('click', function () {
+    const btn = this;
+    btn.disabled = true;
+    fetchWithCSRF('/api/scrape/apparatus-trigger', { method: 'POST', body: '{}' })
+        .then((r) => r.json())
+        .then((result) => {
+            if (!result.success) throw new Error(result.error || 'Sync failed');
+            alert(`Synced ${result.count || 0} apparatus rows.`);
+            window.location.reload();
+        })
+        .catch((err) => alert(err.message || 'Sync failed'))
+        .finally(() => { btn.disabled = false; });
+});
+
+document.getElementById('capture-department-status')?.addEventListener('click', function () {
+    const btn = this;
+    btn.disabled = true;
+    fetchWithCSRF('/api/scrape/capture-department-status', { method: 'POST', body: '{}' })
+        .then((r) => r.json())
+        .then((result) => {
+            if (!result.success) throw new Error(result.error || 'Capture failed');
+            alert(`Sample saved to ${result.path}\nRows parsed: ${result.count || 0}\nSource: ${result.source_url || 'n/a'}`);
+        })
+        .catch((err) => alert(err.message || 'Capture failed'))
+        .finally(() => { btn.disabled = false; });
+});
+</script>
+{% endif %}
+{% endblock %}

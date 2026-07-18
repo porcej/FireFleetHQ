@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    body.dashboard-page {
+        --dashboard-navbar-height: 64px;
+    }
+
+    body.dashboard-page .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        transform: translateY(-100%);
+        transition: transform 0.3s ease-in-out;
+        z-index: 1050;
+    }
+
+    body.dashboard-page.navbar-visible .navbar {
+        transform: translateY(0);
+    }
+
+    body.dashboard-page main.container-fluid {
+        margin-top: 0 !important;
+        padding-top: 1rem;
+    }
+
+    body.dashboard-page.navbar-visible main.container-fluid {
+        padding-top: calc(var(--dashboard-navbar-height) + 1rem);
+    }
+
+    body.dashboard-page #alert-banner {
+        bottom: 1.5rem;
+    }
+
+    @media (max-width: 991.98px), (pointer: coarse) {
+        body.dashboard-page .navbar {
+            position: sticky;
+            transform: translateY(0);
+        }
+
+        body.dashboard-page main.container-fluid {
+            padding-top: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block title %}Dashboard - FireFleet HQ{% endblock %}
+
+{% block content %}
+<div class="row mt-3">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Tasks</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_tasks %}
+                <div class="list-group" id="dashboard-tasks-list">
+                    {% for task in recent_tasks %}
+                    <div class="list-group-item" data-task-id="{{ task.id }}">
+                        <div class="form-check">
+                            <input class="form-check-input dashboard-task-checkbox"
+                                   type="checkbox"
+                                   data-task-id="{{ task.id }}"
+                                   {% if task.completed %}checked disabled{% endif %}
+                                   onchange="toggleDashboardTask({{ task.id }})">
+                            <label class="form-check-label {% if task.completed %}text-decoration-line-through text-muted{% endif %}">
+                                {{ task.content }}
+                            </label>
+                        </div>
+                        <small class="text-muted">
+                            <span class="badge {% if task.priority == 1 %}bg-danger{% elif task.priority == 2 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {{ task.get_priority_label() }}
+                            </span>
+                            | {{ task.created_at|localtime }}
+                        </small>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <a href="{{ url_for('main.tasks') }}" class="btn btn-sm btn-outline-primary">
+                        View All Tasks <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                {% else %}
+                <p class="text-muted">No tasks yet. <a href="{{ url_for('main.tasks') }}">Create your first task</a>!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h5 class="mb-0"><i class="bi bi-truck"></i> Apparatus Fleet</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <small class="text-muted" id="fleet-last-sync">
+                        {% if last_apparatus_scrape %}
+                        Last sync: {{ last_apparatus_scrape|localtime }}
+                        {% else %}
+                        Not synced yet
+                        {% endif %}
+                    </small>
+                    {% if current_user.is_admin %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="sync-apparatus-btn">
+                        <i class="bi bi-arrow-repeat"></i> Sync Now
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filter-due-only" checked>
+                        <label class="form-check-label" for="filter-due-only">Show units with due work / alerts</label>
+                    </div>
+                    <input type="search" class="form-control form-control-sm" style="max-width: 220px;"
+                           id="fleet-search" placeholder="Search assignment, door #, or station">
+                </div>
+                <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                    <table class="table table-striped table-hover table-sm" id="apparatus-table">
+                        <thead class="sticky-top bg-body">
+                            <tr>
+                                <th>Assignment</th>
+                                <th>Door #</th>
+                                <th>Station</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Open Alerts</th>
+                                <th>Checks Due</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apparatus-table-body">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">Loading fleet inventory...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.body.classList.add('dashboard-page');
+
+(function setupDashboardNavbar() {
+    const isCoarse = window.matchMedia('(pointer: coarse)').matches;
+    const isNarrow = window.matchMedia('(max-width: 991.98px)').matches;
+    if (isCoarse || isNarrow) {
+        document.body.classList.add('navbar-visible');
+        return;
+    }
+    let hideTimer = null;
+    const showNav = () => {
+        document.body.classList.add('navbar-visible');
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => document.body.classList.remove('navbar-visible'), 2500);
+    };
+    document.addEventListener('mousemove', (e) => {
+        if (e.clientY < 48) showNav();
+    });
+})();
+
+let apparatusRows = [];
+
+function parseMdy(value) {
+    if (!value) return null;
+    const parts = String(value).trim().split('/');
+    if (parts.length !== 3) return null;
+    const month = parseInt(parts[0], 10);
+    const day = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    if (!month || !day || !year) return null;
+    return new Date(year, month - 1, day);
+}
+
+function hasDueWork(row) {
+    const checks = Number(row.checks_due || 0);
+    const alerts = Number(row.open_alerts || 0);
+    if (checks > 0 || alerts > 0) return true;
+    const due = parseMdy(row.next_due);
+    if (!due) return false;
+    const now = new Date();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    return due <= endOfMonth;
+}
+
+function renderApparatusTable() {
+    const tbody = document.getElementById('apparatus-table-body');
+    if (!tbody) return;
+
+    const dueOnly = document.getElementById('filter-due-only')?.checked;
+    const q = (document.getElementById('fleet-search')?.value || '').trim().toLowerCase();
+
+    let rows = apparatusRows.slice();
+    if (dueOnly) rows = rows.filter(hasDueWork);
+    if (q) {
+        rows = rows.filter((r) => {
+            const hay = `${r.assignment || r.unit_name || ''} ${r.door_number || r.app_unit || ''} ${r.station || ''} ${r.vehicle_type || ''} ${r.status || ''}`.toLowerCase();
+            return hay.includes(q);
+        });
+    }
+
+    rows.sort((a, b) => {
+        const ac = Number(a.checks_due || 0) + Number(a.open_alerts || 0);
+        const bc = Number(b.checks_due || 0) + Number(b.open_alerts || 0);
+        if (bc !== ac) return bc - ac;
+        return String(a.assignment || a.unit_name || '').localeCompare(String(b.assignment || b.unit_name || ''));
+    });
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No apparatus match the current filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((row) => {
+        const statusHtml = row.status_display || row.status || '';
+        const alerts = Number(row.open_alerts || 0);
+        const checks = Number(row.checks_due || 0);
+        return `
+            <tr>
+                <td><strong>${escapeHtml(row.assignment || row.unit_name || '')}</strong></td>
+                <td>${escapeHtml(row.door_number || row.app_unit || '')}</td>
+                <td>${escapeHtml(row.station || '')}</td>
+                <td>${escapeHtml(row.vehicle_type || '')}</td>
+                <td class="${escapeHtml(row.status_class || '')}">${statusHtml}</td>
+                <td>${alerts > 0 ? `<span class="badge bg-danger">${alerts}</span>` : '0'}</td>
+                <td>${checks > 0 ? `<span class="badge bg-warning text-dark">${checks}</span>` : '0'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function loadApparatusList() {
+    fetch('/api/apparatus-list')
+        .then((r) => r.json())
+        .then((payload) => {
+            apparatusRows = Array.isArray(payload.data) ? payload.data : [];
+            if (payload.last_scrape) {
+                const el = document.getElementById('fleet-last-sync');
+                if (el) el.textContent = 'Last sync: ' + payload.last_scrape.replace('T', ' ').slice(0, 16);
+            }
+            renderApparatusTable();
+        })
+        .catch((err) => {
+            console.error(err);
+            const tbody = document.getElementById('apparatus-table-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Failed to load fleet inventory.</td></tr>';
+            }
+        });
+}
+
+window.loadApparatusList = loadApparatusList;
+window.renderApparatusTable = renderApparatusTable;
+
+document.getElementById('filter-due-only')?.addEventListener('change', renderApparatusTable);
+document.getElementById('fleet-search')?.addEventListener('input', renderApparatusTable);
+
+const syncBtn = document.getElementById('sync-apparatus-btn');
+if (syncBtn) {
+    syncBtn.addEventListener('click', function () {
+        syncBtn.disabled = true;
+        syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+        fetchWithCSRF('/api/scrape/apparatus-trigger', { method: 'POST', body: '{}' })
+            .then((r) => r.json())
+            .then((result) => {
+                if (!result.success) throw new Error(result.error || 'Sync failed');
+                loadApparatusList();
+            })
+            .catch((err) => alert(err.message || 'Sync failed'))
+            .finally(() => {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+            });
+    });
+}
+
+function toggleDashboardTask(taskId) {
+    fetchWithCSRF(`/tasks/${taskId}/toggle`, { method: 'POST', body: '{}' })
+        .then((r) => r.json())
+        .then(() => window.location.reload())
+        .catch(console.error);
+}
+
+loadApparatusList();
+setInterval(loadApparatusList, 60000);
+</script>
+{% endblock %}

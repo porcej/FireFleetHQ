@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks - FireFleet HQ{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="bi bi-list-check"></i> Task List</h2>
+        
+        {% if current_user.is_admin %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Add New Task</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.create_task') }}">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.content.label(class="form-label") }}
+                        {{ form.content(class="form-control", rows="3") }}
+                        {% if form.content.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.content.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.priority.label(class="form-label") }}
+                        {{ form.priority(class="form-select") }}
+                        {% if form.priority.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.priority.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3 form-check">
+                        {{ form.completed(class="form-check-input") }}
+                        {{ form.completed.label(class="form-check-label") }}
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Create Task
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Tasks ({{ tasks|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if tasks %}
+                <div class="list-group">
+                    {% for task in tasks %}
+                    <div class="list-group-item d-flex justify-content-between align-items-start" 
+                         data-task-id="{{ task.id }}"
+                         data-task-priority="{{ task.priority }}">
+                        <div class="ms-2 me-auto">
+                            <div class="form-check">
+                                <input class="form-check-input task-checkbox" 
+                                       type="checkbox" 
+                                       data-task-id="{{ task.id }}"
+                                       {% if task.completed %}checked{% endif %}
+                                       onchange="toggleTask({{ task.id }})">
+                                <label class="form-check-label {% if task.completed %}text-decoration-line-through text-muted{% endif %}" 
+                                       data-task-content="{{ task.id }}">
+                                    {{ task.content }}
+                                </label>
+                            </div>
+                            <small class="text-muted">
+                                <span class="badge {% if task.priority == 1 %}bg-danger{% elif task.priority == 2 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ task.get_priority_label() }}
+                                </span>
+                                | Created: {{ task.created_at|localtime }}
+                                {% if task.updated_at != task.created_at %}
+                                    | Updated: {{ task.updated_at|localtime }}
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% if current_user.is_admin %}
+                        <div class="btn-group" role="group">
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-primary" 
+                                    onclick="editTask({{ task.id }})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteTask({{ task.id }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">
+                    {% if current_user.is_admin %}
+                        No tasks yet. Create your first task above!
+                    {% else %}
+                        No tasks yet.
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function formatTaskDate(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleString('en-US', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function createTaskElement(task) {
+        const taskItem = document.createElement('div');
+        taskItem.className = 'list-group-item d-flex justify-content-between align-items-start';
+        taskItem.setAttribute('data-task-id', task.id);
+        
+        const createdAt = formatTaskDate(task.created_at);
+        const updatedAt = formatTaskDate(task.updated_at);
+        const updatedText = updatedAt !== createdAt ? ` | Updated: ${updatedAt}` : '';
+        
+        // Priority badge
+        const priority = task.priority || 2;
+        const priorityLabels = {1: 'High', 2: 'Medium', 3: 'Low'};
+        const priorityClasses = {1: 'bg-danger', 2: 'bg-warning', 3: 'bg-secondary'};
+        const priorityLabel = priorityLabels[priority] || 'Medium';
+        const priorityClass = priorityClasses[priority] || 'bg-secondary';
+        const priorityBadge = `<span class="badge ${priorityClass}">${priorityLabel}</span>`;
+        
+        // Check if current user is admin (we'll need to pass this or check a global variable)
+        const isAdmin = {% if current_user.is_admin %}true{% else %}false{% endif %};
+        
+        const adminButtons = isAdmin ? `
+            <div class="btn-group" role="group">
+                <button type="button" 
+                        class="btn btn-sm btn-outline-primary" 
+                        onclick="editTask(${task.id})">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button type="button" 
+                        class="btn btn-sm btn-outline-danger" 
+                        onclick="deleteTask(${task.id})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        ` : '';
+        
+        taskItem.innerHTML = `
+            <div class="ms-2 me-auto" style="flex: 1;">
+                <div class="form-check">
+                    <input class="form-check-input task-checkbox" 
+                           type="checkbox" 
+                           data-task-id="${task.id}"
+                           ${task.completed ? 'checked' : ''}
+                           onchange="toggleTask(${task.id})">
+                    <label class="form-check-label ${task.completed ? 'text-decoration-line-through text-muted' : ''}" 
+                           data-task-content="${task.id}">
+                        ${escapeHtml(task.content)}
+                    </label>
+                </div>
+                <small class="text-muted">
+                    ${priorityBadge} | Created: ${createdAt}${updatedText}
+                </small>
+            </div>
+            ${adminButtons}
+        `;
+        
+        return taskItem;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function toggleTask(taskId) {
+        fetchWithCSRF(`/tasks/${taskId}/toggle`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+                const label = taskItem.querySelector('label');
+                const checkbox = taskItem.querySelector('input[type="checkbox"]');
+                if (data.completed) {
+                    label.classList.add('text-decoration-line-through', 'text-muted');
+                    checkbox.checked = true;
+                } else {
+                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                    checkbox.checked = false;
+                }
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+    function editTask(taskId) {
+        const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+        if (!taskItem) return;
+        
+        // Get current task content
+        const label = taskItem.querySelector(`label[data-task-content="${taskId}"]`);
+        const currentContent = label ? label.textContent.trim() : '';
+        
+        // Check if already in edit mode
+        const existingForm = taskItem.querySelector('.task-edit-form');
+        if (existingForm) {
+            // Cancel edit mode
+            cancelEditTask(taskId);
+            return;
+        }
+        
+        // Get current priority from the task item
+        const currentPriority = taskItem.getAttribute('data-task-priority') || '2';
+        
+        // Create edit form
+        const editForm = document.createElement('div');
+        editForm.className = 'task-edit-form mt-2';
+        editForm.innerHTML = `
+            <textarea class="form-control task-edit-content" rows="3" style="resize: vertical;">${escapeHtml(currentContent)}</textarea>
+            <div class="mt-2">
+                <label class="form-label small">Priority</label>
+                <select class="form-select form-select-sm task-edit-priority">
+                    <option value="1" ${currentPriority === '1' ? 'selected' : ''}>High</option>
+                    <option value="2" ${currentPriority === '2' ? 'selected' : ''}>Medium</option>
+                    <option value="3" ${currentPriority === '3' ? 'selected' : ''}>Low</option>
+                </select>
+            </div>
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-success" onclick="saveTask(${taskId})">
+                    <i class="bi bi-check"></i> Save
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="cancelEditTask(${taskId})">
+                    <i class="bi bi-x"></i> Cancel
+                </button>
+            </div>
+        `;
+        
+        // Hide the label and insert form
+        if (label) {
+            label.style.display = 'none';
+            // Insert form after the form-check div (parent of label)
+            // The structure is: ms-2 me-auto > form-check > label
+            const formCheckDiv = label.parentElement; // form-check div
+            const containerDiv = formCheckDiv ? formCheckDiv.parentElement : null; // ms-2 me-auto div
+            if (containerDiv) {
+                // Insert after the form-check div, before the small element
+                containerDiv.insertBefore(editForm, formCheckDiv.nextSibling);
+            } else {
+                // Fallback: append to form-check parent
+                if (formCheckDiv && formCheckDiv.parentElement) {
+                    formCheckDiv.parentElement.appendChild(editForm);
+                }
+            }
+        }
+        
+        // Focus the textarea
+        const textarea = editForm.querySelector('.task-edit-content');
+        if (textarea) {
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }
+    }
+
+    function cancelEditTask(taskId) {
+        const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+        if (!taskItem) return;
+        
+        const editForm = taskItem.querySelector('.task-edit-form');
+        if (editForm) {
+            editForm.remove();
+        }
+        
+        // Show the label again
+        const label = taskItem.querySelector(`label[data-task-content="${taskId}"]`);
+        if (label) {
+            label.style.display = '';
+        }
+    }
+
+    function saveTask(taskId) {
+        const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+        if (!taskItem) return;
+        
+        const editForm = taskItem.querySelector('.task-edit-form');
+        if (!editForm) return;
+        
+        const textarea = editForm.querySelector('.task-edit-content');
+        if (!textarea) return;
+        
+        const newContent = textarea.value.trim();
+        
+        if (!newContent) {
+            alert('Task content cannot be empty');
+            return;
+        }
+        
+        // Get current checkbox state and priority
+        const checkbox = taskItem.querySelector('input[type="checkbox"]');
+        const isCompleted = checkbox ? checkbox.checked : false;
+        const prioritySelect = editForm.querySelector('.task-edit-priority');
+        const priority = prioritySelect ? parseInt(prioritySelect.value) : 2;
+        
+        // Send update request
+        fetchWithCSRF(`/tasks/${taskId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                content: newContent,
+                completed: isCompleted,
+                priority: priority
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Task will be updated via Socket.IO event
+                // But we can cancel edit mode immediately for better UX
+                cancelEditTask(taskId);
+            } else {
+                if (data.errors) {
+                    const errorMessages = Object.values(data.errors).flat().join('\n');
+                    alert('Error updating task:\n' + errorMessages);
+                } else {
+                    alert('Error updating task');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating task');
+        });
+    }
+
+    function deleteTask(taskId) {
+        if (confirm('Are you sure you want to delete this task?')) {
+            fetchWithCSRF(`/tasks/${taskId}/delete`, {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Task will be removed via Socket.IO event
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    }
+
+    // Real-time task update handler
+    window.handleTaskUpdate = function(data) {
+        const tasksContainer = document.querySelector('.list-group');
+        const tasksHeader = document.querySelector('.card-header h5');
+        
+        if (!tasksContainer) return;
+        
+        if (data.action === 'refresh') {
+            location.reload();
+            return;
+        }
+        
+        if (data.action === 'deleted') {
+            const taskItem = tasksContainer.querySelector(`[data-task-id="${data.id}"]`);
+            if (taskItem) {
+                taskItem.remove();
+                // Update task count
+                const taskCount = tasksContainer.children.length;
+                if (tasksHeader) {
+                    tasksHeader.textContent = `Tasks (${taskCount})`;
+                }
+                // Show empty message if no tasks
+                if (taskCount === 0) {
+                    tasksContainer.innerHTML = '<p class="text-muted m-3">No tasks yet. Create your first task above!</p>';
+                }
+            }
+            return;
+        }
+        
+        if (data.action === 'added') {
+            // Add new task to the top of the list
+            const taskElement = createTaskElement(data);
+            if (tasksContainer.querySelector('.text-muted')) {
+                tasksContainer.innerHTML = '';
+            }
+            tasksContainer.insertBefore(taskElement, tasksContainer.firstChild);
+            // Update task count
+            const taskCount = tasksContainer.children.length;
+            if (tasksHeader) {
+                tasksHeader.textContent = `Your Tasks (${taskCount})`;
+            }
+            return;
+        }
+        
+        if (data.action === 'completed' || data.action === 'uncompleted') {
+            const taskItem = tasksContainer.querySelector(`[data-task-id="${data.id}"]`);
+            if (taskItem) {
+                const label = taskItem.querySelector('label');
+                const checkbox = taskItem.querySelector('input[type="checkbox"]');
+                if (data.completed) {
+                    label.classList.add('text-decoration-line-through', 'text-muted');
+                    checkbox.checked = true;
+                } else {
+                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                    checkbox.checked = false;
+                }
+            }
+            return;
+        }
+        
+        if (data.action === 'updated') {
+            const taskItem = tasksContainer.querySelector(`[data-task-id="${data.id}"]`);
+            if (taskItem) {
+                // Cancel edit mode if active
+                const editForm = taskItem.querySelector('.task-edit-form');
+                if (editForm) {
+                    editForm.remove();
+                    const label = taskItem.querySelector(`label[data-task-content="${data.id}"]`);
+                    if (label) {
+                        label.style.display = '';
+                    }
+                }
+                
+                // Replace with updated task
+                const newTaskElement = createTaskElement(data);
+                taskItem.replaceWith(newTaskElement);
+            }
+            return;
+        }
+    };
+
+    // Expose function for SocketIO updates (legacy support)
+    window.loadTasksFunction = function() {
+        location.reload();
+    };
+</script>
+{% endblock %}
+
