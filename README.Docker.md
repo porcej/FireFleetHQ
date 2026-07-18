@@ -12,6 +12,8 @@ SECRET_KEY=your-strong-secret-key-here
 DATABASE_URL=sqlite:////app/data/firefleethq.db
 SOCKETIO_ASYNC_MODE=threading
 SCRAPE_INTERVAL_MINUTES=15
+# Host port published by docker compose (container stays on 8000)
+HOST_PORT=8000
 ```
 
 Generate a secret key:
@@ -39,9 +41,11 @@ docker-compose down
 
 ## Accessing the Application
 
-Once started, the application will be available at:
+Once started, the application will be available at (default `HOST_PORT=8000`):
 - **Web Interface**: http://localhost:8000
 - **Health Check**: http://localhost:8000/health
+
+On a host that already uses 8000, set a free port in `.env` (for example `HOST_PORT=8010`) and open `http://localhost:8010` instead.
 
 ## Data Persistence
 
@@ -178,7 +182,7 @@ docker-compose up -d --build
 ### Container won't start
 - Check logs: `docker-compose logs firefleethq`
 - Verify environment variables are set correctly
-- Ensure port 8000 is not already in use
+- Ensure the published host port (`HOST_PORT`, default 8000) is not already in use
 
 ### Database errors
 - Check that **`./instance`** exists on the host and is writable (matches the default volume in `docker-compose.yml`)
