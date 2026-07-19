@@ -106,6 +106,9 @@ function initSocketIO() {
             if (window.location.pathname.includes('/dashboard') && typeof window.loadApparatusList === 'function') {
                 window.loadApparatusList();
             }
+            if (window.location.pathname.includes('/stations') && typeof window.loadStationsList === 'function') {
+                window.loadStationsList();
+            }
             if (window.location.pathname.includes('/reserve') && typeof window.loadReserveList === 'function') {
                 window.loadReserveList();
             }

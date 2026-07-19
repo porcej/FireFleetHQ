@@ -73,6 +73,10 @@ class ScrapeConfigForm(FlaskForm):
         'Apparatus stations (comma-separated; blank = all)',
         validators=[Optional(), Length(max=512)],
     )
+    reserve_homes = StringField(
+        'Reserve Home stations (comma-separated; blank = none)',
+        validators=[Optional(), Length(max=512)],
+    )
 
 
 class PasswordChangeForm(FlaskForm):

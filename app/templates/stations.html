@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Stations - FireFleet HQ{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    .stations-page h2 {
+        margin-bottom: 0.25rem;
+    }
+
+    .station-group + .station-group {
+        margin-top: 1.5rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border-color, var(--bs-border-color));
+    }
+
+    .station-group-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.65rem;
+    }
+
+    .station-group-title h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+    .station-group-title .count {
+        color: var(--bs-secondary-color);
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+
+    .stations-table {
+        margin-bottom: 0;
+    }
+
+    .stations-table th:nth-child(2),
+    .stations-table td:nth-child(2) {
+        width: 7rem;
+        white-space: nowrap;
+    }
+
+    .stations-table th:nth-child(5),
+    .stations-table td:nth-child(5) {
+        width: 5.5rem;
+        text-align: center;
+    }
+
+    .stations-table .form-check-input {
+        cursor: default;
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stations-page">
+    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+        <div>
+            <h2><i class="bi bi-building"></i> Stations</h2>
+            <p class="text-muted mb-0" id="stations-meta">Apparatus by station</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" id="station-groups">
+            <p class="text-muted mb-0">Loading…</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderStationsPage(payload) {
+    const groupsEl = document.getElementById('station-groups');
+    const metaEl = document.getElementById('stations-meta');
+    const byStation = payload.by_station || [];
+    const total = payload.total || 0;
+
+    if (metaEl) {
+        const when = payload.last_scrape
+            ? payload.last_scrape.replace('T', ' ').slice(0, 16)
+            : null;
+        const countLabel = total === 1 ? '1 apparatus' : `${total} apparatus`;
+        metaEl.textContent = when
+            ? `${countLabel} · Last sync: ${when}`
+            : countLabel;
+    }
+
+    if (!byStation.length) {
+        groupsEl.innerHTML = '<p class="text-muted mb-0">No apparatus to list. Sync from Settings.</p>';
+        return;
+    }
+
+    groupsEl.innerHTML = byStation.map((group) => {
+        const rows = (group.apparatus || []).map((row) => {
+            const reserved = Number(row.in_reserve) === 1;
+            const statusHtml = row.status_display || row.status || '';
+            return `
+                <tr>
+                    <td>${escapeHtml(row.name || row.assignment || '')}</td>
+                    <td>${escapeHtml(row.door_number || row.app_unit || '')}</td>
+                    <td>${escapeHtml(row.vehicle_type || '')}</td>
+                    <td class="${escapeHtml(row.status_class || '')}">${statusHtml}</td>
+                    <td>
+                        <input class="form-check-input" type="checkbox"
+                               ${reserved ? 'checked' : ''}
+                               disabled aria-label="In reserve"
+                               title="${reserved ? 'In reserve' : 'Not in reserve'}">
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        const countLabel = group.count === 1 ? '1 unit' : `${group.count} units`;
+        return `
+            <section class="station-group">
+                <div class="station-group-title">
+                    <h3>${escapeHtml(group.station)}</h3>
+                    <span class="count">${escapeHtml(countLabel)}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover stations-table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Door #</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Reserve</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </section>
+        `;
+    }).join('');
+}
+
+function loadStationsList() {
+    fetch('/api/stations-list')
+        .then((r) => r.json())
+        .then((payload) => {
+            if (payload.error) throw new Error(payload.error);
+            renderStationsPage(payload);
+        })
+        .catch((err) => {
+            console.error(err);
+            const groupsEl = document.getElementById('station-groups');
+            if (groupsEl) {
+                groupsEl.innerHTML = '<p class="text-danger mb-0">Failed to load stations.</p>';
+            }
+        });
+}
+
+window.loadStationsList = loadStationsList;
+loadStationsList();
+</script>
+{% endblock %}

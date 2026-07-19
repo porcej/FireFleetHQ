@@ -98,13 +98,13 @@
     <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
         <div>
             <h2><i class="bi bi-archive"></i> Reserve</h2>
-            <p class="text-muted mb-0" id="reserve-total">In-service apparatus marked in reserve</p>
+            <p class="text-muted mb-0" id="reserve-total">Available reserve apparatus at Reserve Home stations</p>
         </div>
     </div>
 
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0">By type</h5>
+            <h5 class="mb-0">Available Reserves</h5>
         </div>
         <div class="card-body">
             <div id="reserve-type-blocks" class="reserve-summary">
@@ -115,7 +115,7 @@
 
     <div class="card">
         <div class="card-header">
-            <h5 class="mb-0">Reserve apparatus</h5>
+            <h5 class="mb-0">Available Reserve Apparatus</h5>
         </div>
         <div class="card-body" id="reserve-groups">
             <p class="text-muted mb-0">Loading…</p>
@@ -142,15 +142,26 @@ function renderReservePage(payload) {
     const byType = payload.by_type || [];
     const total = payload.total || 0;
 
+    const homes = payload.reserve_homes || [];
     if (totalEl) {
-        totalEl.textContent = total === 1
-            ? '1 apparatus in service and in reserve'
-            : `${total} apparatus in service and in reserve`;
+        if (!homes.length) {
+            totalEl.textContent = 'Configure Reserve Home stations in Settings to see available reserves';
+        } else {
+            totalEl.textContent = total === 1
+                ? '1 available reserve apparatus'
+                : `${total} available reserve apparatus`;
+        }
+    }
+
+    if (!homes.length) {
+        blocksEl.innerHTML = '<div class="text-muted">No Reserve Home stations configured.</div>';
+        groupsEl.innerHTML = '<p class="text-muted mb-0">Select Reserve Home stations in Settings.</p>';
+        return;
     }
 
     if (!typeCounts.length) {
-        blocksEl.innerHTML = '<div class="text-muted">No in-service reserve apparatus.</div>';
-        groupsEl.innerHTML = '<p class="text-muted mb-0">No reserve apparatus to list.</p>';
+        blocksEl.innerHTML = '<div class="text-muted">No available reserve apparatus at Reserve Home stations.</div>';
+        groupsEl.innerHTML = '<p class="text-muted mb-0">No available reserve apparatus to list.</p>';
         return;
     }
 

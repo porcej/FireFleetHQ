@@ -21,6 +21,8 @@ class ScrapeConfig(db.Model):
     alerts_font_size = db.Column(db.Integer, default=16, nullable=False)  # pixels
     apparatus_statuses = db.Column(db.String(255), default='', nullable=False)
     apparatus_stations = db.Column(db.String(512), default='', nullable=False)
+    # Stations where reserve apparatus are stored (empty = none configured).
+    reserve_homes = db.Column(db.String(512), default='', nullable=False)
     app_timezone = db.Column(db.String(64), default='America/New_York', nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -117,3 +119,17 @@ class ScrapeConfig(db.Model):
         else:
             parts = self._split_labels(str(value))
         self.apparatus_stations = ",".join(parts)
+
+    def get_reserve_homes(self):
+        """Return configured reserve-home stations; empty means none set."""
+        return self._split_labels(self.reserve_homes)
+
+    def set_reserve_homes(self, value):
+        if value is None:
+            self.reserve_homes = ""
+            return
+        if isinstance(value, (list, tuple, set)):
+            parts = [str(v).strip() for v in value if str(v).strip()]
+        else:
+            parts = self._split_labels(str(value))
+        self.reserve_homes = ",".join(parts)

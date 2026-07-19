@@ -87,8 +87,15 @@ def dashboard():
 @bp.route('/reserve')
 @login_required
 def reserve():
-    """Reserve apparatus page (in_service=1 and in_reserve=1)."""
+    """Available reserve apparatus at configured Reserve Home stations."""
     return render_template('reserve.html')
+
+
+@bp.route('/stations')
+@login_required
+def stations():
+    """Apparatus grouped by station."""
+    return render_template('stations.html')
 
 
 @bp.route('/pstrax-alerts')
@@ -320,6 +327,7 @@ def settings():
     form.app_timezone.data = config.get_app_timezone()
     form.apparatus_statuses.data = config.apparatus_statuses or ''
     form.apparatus_stations.data = config.apparatus_stations or ''
+    form.reserve_homes.data = getattr(config, 'reserve_homes', None) or ''
 
     selected_statuses = set(s.lower() for s in config.get_apparatus_statuses())
     status_rows = (
@@ -347,6 +355,7 @@ def settings():
             apparatus_status_options.append({'name': status, 'selected': True})
 
     selected_stations = set(s.lower() for s in config.get_apparatus_stations())
+    selected_reserve_homes = set(s.lower() for s in config.get_reserve_homes())
     station_rows = (
         db.session.query(func.trim(Apparatus.station))
         .filter(Apparatus.station.isnot(None))
@@ -356,6 +365,7 @@ def settings():
         .all()
     )
     apparatus_station_options = []
+    reserve_home_options = []
     seen_stations = set()
     for (station,) in station_rows:
         label = (station or '').strip()
@@ -367,9 +377,17 @@ def settings():
             'name': label,
             'selected': key in selected_stations if selected_stations else True,
         })
+        reserve_home_options.append({
+            'name': label,
+            'selected': key in selected_reserve_homes,
+        })
     for station in config.get_apparatus_stations():
         if station.lower() not in seen_stations:
             apparatus_station_options.append({'name': station, 'selected': True})
+    for station in config.get_reserve_homes():
+        if station.lower() not in seen_stations:
+            reserve_home_options.append({'name': station, 'selected': True})
+            seen_stations.add(station.lower())
 
     return render_template(
         'settings.html',
@@ -377,6 +395,7 @@ def settings():
         config=config,
         apparatus_status_options=apparatus_status_options,
         apparatus_station_options=apparatus_station_options,
+        reserve_home_options=reserve_home_options,
     )
 
 
@@ -451,6 +470,19 @@ def update_settings():
                 config.set_apparatus_stations(station_values)
         else:
             config.set_apparatus_stations(form.apparatus_stations.data)
+
+        # Reserve Home: empty list is valid (none configured); store exact selection.
+        reserve_home_values = request.form.getlist('reserve_home_selected')
+        known_reserve_homes = request.form.getlist('reserve_home_known')
+        if (
+            known_reserve_homes
+            or reserve_home_values
+            or 'reserve_home_selected' in request.form
+            or 'reserve_home_known' in request.form
+        ):
+            config.set_reserve_homes(reserve_home_values)
+        else:
+            config.set_reserve_homes(form.reserve_homes.data)
 
         db.session.commit()
         update_scrape_schedule()
@@ -588,19 +620,29 @@ def api_apparatus_list():
 @bp.route('/api/reserve-list')
 @login_required
 def api_reserve_list():
-    """In-service reserve apparatus (in_service=1 and in_reserve=1), grouped by type."""
+    """Available reserve apparatus at configured Reserve Home stations, grouped by type."""
     try:
-        rows = (
+        config = ScrapeConfig.query.first()
+        reserve_homes = config.get_reserve_homes() if config else []
+        home_keys = [s.lower() for s in reserve_homes if str(s).strip()]
+
+        query = (
             Apparatus.query
             .filter(Apparatus.in_service == 1)
             .filter(Apparatus.in_reserve == 1)
-            .order_by(
+        )
+        if home_keys:
+            query = query.filter(
+                func.lower(func.trim(Apparatus.station)).in_(home_keys)
+            )
+            rows = query.order_by(
                 Apparatus.vehicle_type.asc(),
                 Apparatus.unit_name.asc(),
                 Apparatus.app_unit.asc(),
-            )
-            .all()
-        )
+            ).all()
+        else:
+            # No Reserve Home stations configured → nothing is "available".
+            rows = []
 
         type_counts = {}
         groups = {}
@@ -634,6 +676,7 @@ def api_reserve_list():
         return jsonify({
             'status': 'success',
             'total': len(rows),
+            'reserve_homes': reserve_homes,
             'type_counts': [
                 {'vehicle_type': t, 'count': type_counts[t]} for t in type_order
             ],
@@ -641,6 +684,34 @@ def api_reserve_list():
         })
     except Exception as e:
         return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@bp.route('/api/stations-list')
+@login_required
+def api_stations_list():
+    """All apparatus grouped by station (Station* names first, then descending)."""
+    try:
+        from app.station_groups import group_apparatus_by_station
+
+        rows = (
+            Apparatus.query
+            .order_by(
+                Apparatus.unit_name.asc(),
+                Apparatus.app_unit.asc(),
+            )
+            .all()
+        )
+        config = ScrapeConfig.query.first()
+        payload = group_apparatus_by_station(rows)
+        payload['status'] = 'success'
+        payload['last_scrape'] = (
+            config.last_apparatus_scrape.isoformat()
+            if config and config.last_apparatus_scrape
+            else None
+        )
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error', 'by_station': []}), 500
 
 
 @bp.route('/api/pstrax-alerts')
