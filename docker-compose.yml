@@ -8,8 +8,11 @@ services:
     environment:
       - FLASK_ENV=production
       - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
-      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/firefleethq.db}
-      - SOCKETIO_ASYNC_MODE=gevent
+      # Always use the mounted volume path. Do not inherit DATABASE_URL from host
+      # .env (e.g. sqlite:///firefleethq.db), or the DB lands in /app/instance
+      # inside the image and is wiped on rebuild.
+      - DATABASE_URL=sqlite:////app/data/firefleethq.db
+      - SOCKETIO_ASYNC_MODE=${SOCKETIO_ASYNC_MODE:-gevent}
       - SCRAPE_INTERVAL_MINUTES=${SCRAPE_INTERVAL_MINUTES:-15}
       - TZ=${TZ:-America/New_York}
       - APP_TIMEZONE=${APP_TIMEZONE:-America/New_York}

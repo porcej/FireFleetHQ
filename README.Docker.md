@@ -8,13 +8,15 @@ This guide explains how to run the FireFleet HQ using Docker Compose.
 
 ```bash
 SECRET_KEY=your-strong-secret-key-here
-# Optional; default in compose is sqlite under /app/data (host ./instance)
-DATABASE_URL=sqlite:////app/data/firefleethq.db
-SOCKETIO_ASYNC_MODE=threading
+SOCKETIO_ASYNC_MODE=gevent
 SCRAPE_INTERVAL_MINUTES=15
 # Host port published by docker compose (container stays on 8000)
 HOST_PORT=8000
 ```
+
+Compose always sets `DATABASE_URL=sqlite:////app/data/firefleethq.db` so the DB lives on the
+`./instance` volume. Do **not** rely on a host `.env` `DATABASE_URL` of
+`sqlite:///firefleethq.db` for Docker — that path is inside the container image and is lost on rebuild.
 
 Generate a secret key:
 ```bash
@@ -49,7 +51,7 @@ On a host that already uses 8000, set a free port in `.env` (for example `HOST_P
 
 ## Data Persistence
 
-By default, `docker-compose.yml` mounts **`./instance`** on the host to **`/app/data`** in the container (SQLite file: `/app/data/firefleethq.db`). Data survives container restarts as long as you keep that folder.
+By default, `docker-compose.yml` mounts **`./instance`** on the host to **`/app/data`** in the container and forces `DATABASE_URL` to `sqlite:////app/data/firefleethq.db`. Data survives rebuilds and restarts as long as you keep that folder (and do not run `docker compose down -v` against a named volume setup).
 
 ## Adding users (Docker)
 
