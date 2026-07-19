@@ -39,10 +39,10 @@
                         </small>
                     </div>
                     <div class="mb-3">
-                        {{ form.apparatus_scrape_interval_hours.label(class="form-label") }}
-                        {{ form.apparatus_scrape_interval_hours(class="form-control", type="number", min="1", disabled=(not current_user.is_admin)) }}
+                        {{ form.apparatus_scrape_interval_minutes.label(class="form-label") }}
+                        {{ form.apparatus_scrape_interval_minutes(class="form-control", type="number", min="1", disabled=(not current_user.is_admin)) }}
                         <small class="form-text text-muted">
-                            Fallback interval in hours if minutes is unset. Last sync:
+                            How often apparatus / fleet status is synced (default: 15 minutes). Last sync:
                             {% if config.last_apparatus_scrape %}
                                 {{ config.last_apparatus_scrape|localtime }}
                             {% else %}

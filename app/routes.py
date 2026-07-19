@@ -319,8 +319,8 @@ def settings():
     form.pstrax_base_url.data = config.pstrax_base_url
     form.pstrax_username.data = config.pstrax_username
     form.scrape_interval.data = str(config.scrape_interval or 15)
-    form.apparatus_scrape_interval_hours.data = str(
-        getattr(config, 'apparatus_scrape_interval_hours', None) or 24
+    form.apparatus_scrape_interval_minutes.data = str(
+        getattr(config, 'apparatus_scrape_interval_minutes', None) or 15
     )
     form.default_alert_color.data = config.get_default_alert_color()
     form.alerts_font_size.data = config.get_alert_font_size()
@@ -428,14 +428,14 @@ def update_settings():
             except ValueError:
                 flash('Invalid scrape interval.', 'error')
                 return redirect(url_for('main.settings'))
-        if form.apparatus_scrape_interval_hours.data:
+        if form.apparatus_scrape_interval_minutes.data:
             try:
-                h = int(form.apparatus_scrape_interval_hours.data)
-                if h < 1:
+                minutes = int(form.apparatus_scrape_interval_minutes.data)
+                if minutes < 1:
                     raise ValueError('min 1')
-                config.apparatus_scrape_interval_hours = h
+                config.apparatus_scrape_interval_minutes = minutes
             except ValueError:
-                flash('Invalid apparatus sync interval (use whole hours, minimum 1).', 'error')
+                flash('Invalid apparatus sync interval (use whole minutes, minimum 1).', 'error')
                 return redirect(url_for('main.settings'))
         config.default_alert_color = (form.default_alert_color.data or 'danger').lower()
         if form.alerts_font_size.data:

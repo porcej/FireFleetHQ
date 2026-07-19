@@ -50,8 +50,8 @@ class ScrapeConfigForm(FlaskForm):
     pstrax_username = StringField('Username', validators=[Optional(), Length(max=255)])
     pstrax_password = PasswordField('Password', validators=[Optional()])
     scrape_interval = StringField('PSTrax alerts scrape interval (minutes)', validators=[Optional()])
-    apparatus_scrape_interval_hours = StringField(
-        'Apparatus sync interval (hours)', validators=[Optional()]
+    apparatus_scrape_interval_minutes = StringField(
+        'Apparatus sync interval (minutes)', validators=[Optional()]
     )
     default_alert_color = SelectField(
         'Default Alert Color', choices=ALERT_COLOR_CHOICES, default='danger', validators=[DataRequired()]

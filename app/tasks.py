@@ -78,14 +78,14 @@ def _alerts_interval_minutes(config):
 
 
 def _apparatus_interval_minutes(config):
-    if config and getattr(config, 'apparatus_scrape_interval_hours', None):
+    if config and getattr(config, 'apparatus_scrape_interval_minutes', None):
         try:
-            hours = int(config.apparatus_scrape_interval_hours)
-            if hours >= 1:
-                return hours * 60
+            minutes = int(config.apparatus_scrape_interval_minutes)
+            if minutes >= 1:
+                return minutes
         except (TypeError, ValueError):
             pass
-    return 24 * 60
+    return 15
 
 
 def start_background_tasks(app):
