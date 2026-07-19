@@ -65,6 +65,22 @@ python add_user.py
 
 Admins can also manage users from the **Users** page.
 
+## Reset a password
+
+Interactive:
+
+```bash
+python reset_password.py
+# or
+python reset_password.py someuser
+```
+
+Non-interactive (scripts / Docker):
+
+```bash
+python reset_password.py someuser --password 'NewSecurePassword'
+```
+
 ## Environment variables
 
 | Variable | Purpose | Default |

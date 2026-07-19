@@ -121,23 +121,13 @@ with app.app_context():
 ### Reset a user’s password
 
 ```bash
-docker compose exec firefleethq python -c "
-from app import create_app, db
-from app.models import User
+docker compose exec firefleethq python reset_password.py admin --password 'NewSecurePassword'
+```
 
-USERNAME = 'admin'
-NEW_PASSWORD = 'NewSecurePassword'
+Omit `--password` to be prompted (requires an interactive TTY: add `-it` if needed):
 
-app = create_app()
-with app.app_context():
-    user = User.query.filter_by(username=USERNAME).first()
-    if not user:
-        print('User not found:', USERNAME)
-    else:
-        user.set_password(NEW_PASSWORD)
-        db.session.commit()
-        print('Password updated for:', USERNAME)
-"
+```bash
+docker compose exec -it firefleethq python reset_password.py admin
 ```
 
 **Tip:** If `docker compose exec` fails with “service not running”, use `docker compose ps` to confirm the service name and that the container is up.
